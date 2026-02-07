@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Fantasy Terminal RPG v0.6</title>
+
+<style>
+:root{
+--green:#00ff88;
+--bg:#0d1117;
+--panel:#161b22;
+--danger:#f85149;
+--common:#ffffff;
+--rare:#58a6ff;
+--epic:#bc8cff;
+--legend:#ffd700;
+--myth:#6200EA;
+}
+
+body{
+margin:0;
+background:var(--bg);
+color:white;
+font-family:Fira Code, monospace;
+display:flex;
+justify-content:center;
+}
+  
+  body{
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.header, h4{
+  font-family: 'Cinzel', serif;
+  letter-spacing: 1px;
+}
+
+#game{
+width:100%;
+max-width:540px;
+border:1px solid #333;
+height:100vh;
+display:flex;
+flex-direction:column;
+}
+
+.header{
+background:var(--panel);
+padding:10px;
+border-bottom:2px solid var(--green);
+font-size:12px;
+}
+
+.stat-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:4px;
+}
+
+.bar{height:6px;background:#333;margin:4px 0}
+.fill{height:100%;background:var(--green)}
+
+.tabs{display:flex;background:#000}
+.tab{
+flex:1;
+padding:8px;
+font-size:11px;
+text-align:center;
+cursor:pointer;
+}
+.active-tab{
+border-bottom:2px solid var(--green);
+color:var(--green);
+}
+
+.content{flex:1;display:none;padding:8px;overflow-y:auto}
+.active{display:block}
+
+#log{
+background:#000;
+height:150px;
+overflow-y:auto;
+padding:5px;
+font-size:11px;
+color:#00ff00;
+border:1px solid #333;
+}
+
+button{
+background:#21262d;
+border:1px solid #30363d;
+color:white;
+padding:6px;
+margin:2px;
+font-size:11px;
+cursor:pointer;
+}
+button:disabled{opacity:0.4}
+
+.item{
+background:#1c2128;
+padding:6px;
+margin-bottom:6px;
+border-left:3px solid var(--green);
+}
+
+.common{color:var(--common)}
+.rare{color:var(--rare)}
+.epic{color:var(--epic)}
+.legend{color:var(--legend)}
+.myth{color:var(--myth)}
+.bad{color:var(--danger)}
+.good{color:var(--green)}
+</style>
+</head>
+
+<body>
+<div id="game">
+
+<div class="header">
+<b id="pClass"></b> | LV <span id="pLvl"></span> | SP <span id="sp"></span>
+<div class="stat-grid">
+<div>HP <span id="hp"></span></div>
+<div>MP <span id="mp"></span></div>
+<div>STR <span id="str"></span></div>
+<div>AGI <span id="agi"></span></div>
+<div>INT <span id="int"></span></div>
+<div>LUCK <span id="luck"></span></div>
+</div>
+<div class="bar"><div id="hpBar" class="fill"></div></div>
+</div>
+
+<div class="tabs">
+<div class="tab active-tab" onclick="openTab('terminal',this)">TERMINAL</div>
+<div class="tab" onclick="openTab('inventory',this)">INVENTORY</div>
+<div class="tab" onclick="openTab('craft',this)">CRAFT</div>
+<div class="tab" onclick="openTab('skill',this)">SKILL</div>
+</div>
+
+<div id="terminal" class="content active">
+<div id="enemyUI"></div>
+<div id="log"></div>
+<button onclick="explore()">EXPLORE</button>
+<button onclick="attack()">ATTACK</button>
+<button onclick="rest()">REST</button>
+</div>
+
+<div id="inventory" class="content">
+<h4>EQUIPMENT</h4>
+<div id="equip"></div>
+
+<h4>MATERIALS</h4>
+<div id="matList"></div>
+
+<h4>ITEMS</h4>
+<div id="inv"></div>
+</div>
+
+<div id="craft" class="content">
+<h4>CRAFT RECIPES</h4>
+<div id="craftList"></div>
+</div>
+
+<div id="skill" class="content">
+<h4>SKILL TREE</h4>
+<div id="skillUI"></div>
+</div>
+
+</div>
+
+<script>
+// ===== PLAYER =====
+const player={
+class:"Developer",
+lvl:999.999,sp:1000000,
+hp:9999,maxHp:99999,
+mp:999,maxMp:9999,
+str:99,agi:999,int:99999,luck:999999,
+weapon:null,armor:null,sesories:null,
+inv:["Small Potion","Ancient Scroll"],
+mats:{iron:1000,wood:1000,essence:1000,}
+};
+
+// ===== ITEMS =====
+const items={
+"Iron Sword":{type:"weapon",atk:18,rarity:"common"},
+"Knight Armor":{type:"armor",def:25,rarity:"rare"},
+"Small Potion":{type:"consumable",heal:30,rarity:"common"},
+"Elixir":{type:"consumable",heal:80,rarity:"rare"},
+"Hand Claws":{type:"weapon",atk:55,rarity:"myth"},
+  "Silver Ring":{type:"sesories",hp:35,rarity:"rare"},
+  "Ancient Scroll":{type:"consumable",sp:3,rarity:"epic"},
+};
+
+// ===== ENEMY =====
+const enemies=[
+{name:"Goblin",hp:40,atk:8,agi:8,drop:[{item:"Iron Sword",chance:100}]}
+];
+
+// ===== RECIPES =====
+const recipes=[
+{name:"Iron Sword",cost:{iron:3,wood:1}},
+{name:"Knight Armor",cost:{iron:6}},
+{name:"Elixir",cost:{essence:2}},
+{name:"Hand Claws",cost:{essence:6,iron:6}},
+  {name:"Silver Ring",cost:{iron:5,essence:1}}
+];
+
+let enemy=null;
+
+// ===== CORE =====
+const logBox=document.getElementById("log");
+function log(t){logBox.innerHTML+=`> ${t}<br>`;logBox.scrollTop=9999;}
+
+function update(){
+hp.innerText=`${player.hp}/${player.maxHp}`;
+mp.innerText=`${player.mp}/${player.maxMp}`;
+str.innerText=player.str;
+agi.innerText=player.agi;
+int.innerText=player.int;
+luck.innerText=player.luck;
+pLvl.innerText=player.lvl;
+sp.innerText=player.sp;
+pClass.innerText=player.class;
+hpBar.style.width=(player.hp/player.maxHp*99999)+"%";
+
+equip.innerHTML=`Weapon: ${player.weapon||"-"}<br>Armor: ${player.armor||"-"}<br>sesories: ${player.sesories||"-"}`;
+
+matList.innerHTML="";
+for(let m in player.mats){
+matList.innerHTML+=`<div class="item">${m}: ${player.mats[m]}</div>`;
+}
+
+inv.innerHTML="";
+player.inv.forEach(i=>{
+inv.innerHTML+=`
+<div class="item ${items[i].rarity}">
+${i}
+${items[i].type!=="consumable"?`
+<button onclick="equipItem('${i}')">
+${
+(player.weapon===i || player.armor===i || player.sesories===i)
+? "UNEQUIP"
+: "EQUIP"
+}
+</button>`:""}
+${items[i].type==="consumable"?`<button onclick="useItem('${i}')">USE</button>`:""}
+</div>`;
+});
+
+renderCraft();
+renderSkill();
+}
+
+// ===== TAB =====
+function openTab(id,el){
+document.querySelectorAll('.content').forEach(c=>c.classList.remove('active'));
+document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active-tab'));
+document.getElementById(id).classList.add('active');
+el.classList.add('active-tab');
+}
+
+// ===== GAME =====
+function explore(){
+enemy=JSON.parse(JSON.stringify(enemies[0]));
+enemyUI.innerHTML=`ENEMY: ${enemy.name} HP ${enemy.hp}`;
+log("Enemy appeared");
+}
+
+function attack(){
+enemy.hp-=player.str;
+log("You hit enemy");
+if(enemy.hp<=0){log("Enemy defeated");enemy=null;enemyUI.innerHTML="";}
+update();
+}
+
+function rest(){
+player.hp=Math.min(player.maxHp,player.hp+9999);
+log("Resting");
+update();
+}
+
+// ===== ITEM =====
+function equipItem(n){
+  const type = items[n].type;
+
+  // Tentukan slot equipment
+  let slot = null;
+  if(type === "weapon") slot = "weapon";
+  if(type === "armor") slot = "armor";
+  if(type === "sesories") slot = "sesories";
+
+  // Jika item sedang dipakai → UNEQUIP
+  if(player[slot] === n){
+    player[slot] = null;
+    log(`${n} unequipped`);
+  }
+  // Jika belum dipakai → EQUIP
+  else{
+    player[slot] = n;
+    log(`${n} equipped`);
+  }
+
+  update();
+}
+function useItem(n){
+  const item = items[n];
+
+  // Jika item menambah HP
+  if(item.heal){
+    player.hp = Math.min(
+      player.maxHp,
+      player.hp + item.heal
+    );
+    log(`HP +${item.heal}`);
+  }
+
+  // Jika item menambah SP
+  if(item.sp){
+    player.sp += item.sp;
+    log(`SP +${item.sp}`);
+  }
+
+  // Hapus item dari inventory
+  player.inv.splice(player.inv.indexOf(n),1);
+
+  log(`Used ${n}`);
+  update();
+}
+
+// ===== CRAFT =====
+function renderCraft(){
+craftList.innerHTML="";
+recipes.forEach(r=>{
+let can=true,txt="";
+for(let m in r.cost){
+let have=player.mats[m]||0;
+let need=r.cost[m];
+if(have<need) can=false;
+txt+=`<span class="${have>=need?'good':'bad'}">${m}: ${have}/${need}</span><br>`;
+}
+craftList.innerHTML+=`
+<div class="item">
+<b>${r.name}</b><br>${txt}
+<button ${!can?"disabled":""} onclick="craftItem('${r.name}')">CRAFT</button>
+</div>`;
+});
+}
+function craftItem(n){
+const r=recipes.find(x=>x.name===n);
+for(let m in r.cost) player.mats[m]-=r.cost[m];
+player.inv.push(n);
+log(`Crafted ${n}`);
+update();
+}
+
+// ===== SKILL =====
+function renderSkill(){
+skillUI.innerHTML=`
+SP: ${player.sp}<br><br>
+<div class="item">STR +3 <button onclick="up('str')">UP</button></div>
+<div class="item">AGI +3 <button onclick="up('agi')">UP</button></div>
+<div class="item">INT +3 <button onclick="up('int')">UP</button></div>
+<div class="item">MAX HP +10 <button onclick="up('hp')">UP</button></div>
+`;
+}
+function up(s){
+if(player.sp<=0) return;
+if(s==="hp"){player.maxHp+=10;player.hp+=10;}
+else player[s]+=3;
+player.sp--;
+log(`Upgrade ${s}`);
+update();
+}
+
+// INIT
+update();
+</script>
+</body>
+</html>
